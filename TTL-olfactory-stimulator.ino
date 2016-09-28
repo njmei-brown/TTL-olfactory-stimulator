@@ -30,32 +30,30 @@ const byte SOL_PIN_2 = 5;
 const byte SOL_PIN_3 = 6;
 const byte SOL_PIN_4 = 9;
 
-boolean solenoid_state = LOW;
-
-unsigned long ttl_time = 0;            // variable to store when a TTL pulse is received by the Arduino
-unsigned long solenoid_on_time = 0;
-
 // Note: using unsigned long will guarantee overflow proof code
 // micros diff comparisons will be the equivalent to: (current_micros-ttl_time) % 4,294,967,295
+unsigned long ttl_time = 0;            // variable to store when a TTL pulse is received by the Arduino
+unsigned long solenoid_on_time = 0;
 unsigned long current_micros = 0;
 unsigned long micros_elapsed = 0;     
-     
+
+boolean solenoid_state = LOW;
 boolean run_solenoid_timer = false;
 
 /*============== User Defined Variables ==================*/
-float desired_solenoid_on_time = 5;    // Desired ON time for a solenoid (in seconds)
-float desired_post_ttl_delay = 1;      // Desired amount of time to wait after TTL pulse to turn on solenoid (in seconds)
-float solenoid_cooldown = 30;          // After a bout of olfactory stimulation, this is the length of time (in seconds) to 'cooldown' before allowing activation of the solenoid again
-int num_stim_bouts = 1;               // Number of bouts of odor stimulation to deliver (inter-bout interval time will be determined by 'solenoid_cooldown')
+float des_sol_on_time = 1;      // Desired ON time for a solenoid (in seconds)
+float des_post_ttl_delay = 0;     // Desired amount of time to wait after TTL pulse to turn on solenoid (in seconds)
+float sol_cooldown = 1;         // After a bout of olfactory stimulation, this is the length of time (in seconds) to 'cooldown' before allowing activation of the solenoid again
+int num_bouts = 6;               // Number of bouts of odor stimulation to deliver after receiving a TTL pulse (inter-bout interval time will be determined by 'solenoid_cooldown')
+
+// Perform conversions from user defined variables (in seconds) to microseconds
+const float desired_solenoid_on_time = des_sol_on_time * 1000000;
+const float desired_post_ttl_delay = des_post_ttl_delay * 1000000;
+const float solenoid_cooldown = sol_cooldown * 1000000;
+const int num_stim_bouts = num_bouts;
 
 /*===================== Setup ==============================*/
 void setup() {  
-
-  // Perform conversions from user defined variables (in seconds) to microseconds
-  desired_solenoid_on_time = desired_solenoid_on_time * 1000000;
-  desired_post_ttl_delay = desired_post_ttl_delay * 1000000;
-  solenoid_cooldown = solenoid_cooldown * 1000000;
-  
   // Set the digital pins as inputs or output: 
   pinAsInput(TTL_PIN);
   pinAsOutput(SOL_PIN_1);
@@ -64,7 +62,8 @@ void setup() {
   pinAsOutput(SOL_PIN_4);
 
   // Start serial comms and set baud rate to 115200
-  Serial.begin(115200);
+  // Only needed for debugging
+  //Serial.begin(115200);
 }
 
 /*===================== Olfactory Stimulator Timing Loop ========================= */
@@ -72,10 +71,21 @@ void loop() {
 
   // Check if we have recieved a TTL pulse
   if (isHigh(TTL_PIN) && run_solenoid_timer == false) {
-    Serial.print("Received a TTL!\n");
+    //Serial.print("Received a TTL!\n");
     run_solenoid_timer = true;
     ttl_time = micros();
+    num_bouts = num_stim_bouts;
   }
+
+// Debug code for when we don't have a TTL pulse generator
+//  if(Serial.available() > 0) {
+//    int val = Serial.read();
+//    Serial.print("Received a TTL!\n");
+//    run_solenoid_timer = true;
+//    ttl_time = micros();
+//    num_bouts = num_stim_bouts;
+//  }
+  
   // Check if we're in solenoid timer mode or not
   if (run_solenoid_timer == true) {
     current_micros = micros();
@@ -86,8 +96,8 @@ void loop() {
       if (micros_elapsed > desired_post_ttl_delay) {
         solenoid_state = HIGH;
         digitalHigh(SOL_PIN_1);
-        Serial.print("Solenoid is now HIGH\n");
-        Serial.println(micros());
+        //Serial.print("Solenoid is now HIGH\n");
+        //Serial.println(micros());
         solenoid_on_time = micros();
       }
     }
@@ -95,18 +105,18 @@ void loop() {
       if (current_micros - solenoid_on_time > desired_solenoid_on_time) {
         solenoid_state = LOW;
         digitalLow(SOL_PIN_1);
-        Serial.print("Solenoid is now LOW");
-        Serial.println(micros());
+        //Serial.print("Solenoid is now LOW");
+        //Serial.println(micros());
         run_solenoid_timer = false;
 
         // After we turn off the solenoid (1 bout of olfactory stimulation), delay (blocks) until our cooldown has ellapsed
         // delay() function pauses program (in milleseconds)
         delay((unsigned long)(solenoid_cooldown/1000)); 
 
-        if (num_stim_bouts > 0) {
+        if (num_bouts > 1) {
           run_solenoid_timer = true;
           ttl_time = micros();
-          num_stim_bouts--;
+          num_bouts--;
         }
       }
     }
